@@ -7,6 +7,9 @@ config :wongi_engine_webui, WongiEngineWebuiWeb.Endpoint,
   secret_key_base: "lzBdUztmOzTiVBRE12PFxF9v8swPK4ClIy/ojwFJnhot4jxTABMyMe9x2ZRsg8Ai",
   server: false
 
+# Tests need the standalone endpoint (see WongiEngineWebui.Application)
+config :wongi_engine_webui, standalone: true
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 

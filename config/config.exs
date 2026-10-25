@@ -30,11 +30,13 @@ config :phoenix_live_view,
 config :volt,
   entry: "assets/js/app.js",
   root: "assets",
-  outdir: "priv/static/assets",
+  outdir: "priv/assets",
   target: :es2022,
   sourcemap: :hidden,
   # LiveView writes colocated hooks/CSS to _build/$MIX_ENV/phoenix-colocated/
-  resolve_dirs: [Path.expand("../deps", __DIR__), Mix.Project.build_path()]
+  resolve_dirs: [Path.expand("../deps", __DIR__), Mix.Project.build_path()],
+  # elkjs probes for this Node-only package; the shim lets it run in-thread
+  aliases: %{"web-worker" => "assets/js/shims/web-worker.js"}
 
 # Configure `mix volt.lint` (oxlint)
 config :volt, :lint,

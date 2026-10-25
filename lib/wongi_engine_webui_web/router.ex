@@ -1,27 +1,28 @@
 defmodule WongiEngineWebuiWeb.Router do
+  @moduledoc """
+  The standalone server's router. It mounts the UI the same way a host
+  application would (see `WongiEngineWebui.Router`), using the example rules.
+  """
   use WongiEngineWebuiWeb, :router
+
+  import WongiEngineWebui.Router
 
   pipeline :browser do
     plug :accepts, ["html"]
     plug :fetch_session
     plug :fetch_live_flash
-    plug :put_root_layout, html: {WongiEngineWebuiWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
   end
 
-  pipeline :api do
-    plug :accepts, ["json"]
-  end
-
-  scope "/", WongiEngineWebuiWeb do
+  scope "/" do
     pipe_through :browser
 
-    get "/", PageController, :home
-  end
+    wongi_engine_webui("/example",
+      engine: {WongiEngineWebui.Example, :engine, []},
+      live_session_name: :wongi_engine_webui_example
+    )
 
-  # Other scopes may use custom stacks.
-  # scope "/api", WongiEngineWebuiWeb do
-  #   pipe_through :api
-  # end
+    wongi_engine_webui("/", initial_rules: {WongiEngineWebui.Example, :rules, []})
+  end
 end

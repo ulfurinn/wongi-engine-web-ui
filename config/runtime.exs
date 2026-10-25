@@ -7,16 +7,10 @@ import Config
 # any compile-time configuration in here, as it won't be applied.
 # The block below contains prod specific runtime configuration.
 
-# ## Using releases
-#
-# If you use `mix release`, you need to explicitly enable the server
-# by passing the PHX_SERVER=true when you start it:
-#
-#     PHX_SERVER=true bin/wongi_engine_webui start
-#
-# Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
-# script that automatically sets the env var above.
-if System.get_env("PHX_SERVER") do
+# WONGI_ENGINE_WEBUI_SERVER=true starts the standalone server (see
+# WongiEngineWebui.Application). Without it, nothing is started, which is what
+# host applications using this project as a dependency get.
+if System.get_env("WONGI_ENGINE_WEBUI_SERVER") in ~w(1 true) do
   config :wongi_engine_webui, WongiEngineWebuiWeb.Endpoint, server: true
 end
 

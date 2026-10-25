@@ -6,56 +6,66 @@ defmodule WongiEngineWebuiWeb.Layouts do
   use WongiEngineWebuiWeb, :html
 
   # Embed all files in layouts/* within this module.
-  # The default root.html.heex file contains the HTML
-  # skeleton of your application, namely HTML headers
-  # and other static content.
+  # The root layout is rendered with the LiveView's assigns, which provide
+  # `@asset_js`, `@asset_css` and `@live_socket_path` (see `asset_assigns/2`).
   embed_templates "layouts/*"
 
-  # Mirrors Volt.static_path/2: assets come from Volt.DevServer when code reloading is on.
-  defp dev_server?(conn), do: Phoenix.Controller.endpoint_module(conn).config(:code_reloader)
+  @doc """
+  Asset URLs for the root layout.
+
+  In the standalone server with code reloading, assets come from
+  `Volt.DevServer`, which injects the CSS itself. Everywhere else, including
+  host applications, they come from `WongiEngineWebuiWeb.Assets` under the
+  mount `prefix`.
+  """
+  def asset_assigns(endpoint, prefix) do
+    if endpoint == WongiEngineWebuiWeb.Endpoint and endpoint.config(:code_reloader) do
+      %{asset_js: "/assets/js/app.js", asset_css: nil}
+    else
+      %{
+        asset_js: "#{prefix}/_assets/#{WongiEngineWebuiWeb.Assets.name(:js)}",
+        asset_css: "#{prefix}/_assets/#{WongiEngineWebuiWeb.Assets.name(:css)}"
+      }
+    end
+  end
 
   @doc """
   Renders your app layout.
 
-  This function is typically invoked from every template,
-  and it often contains your application menu, sidebar,
-  or similar.
+  A full-height shell with a header bar; the content fills the rest.
 
   ## Examples
 
-      <Layouts.app flash={@flash}>
-        <h1>Content</h1>
+      <Layouts.app flash={@flash} subtitle="Editor">
+        <:actions><.button>Reset</.button></:actions>
+        ...
       </Layouts.app>
 
   """
   attr :flash, :map, required: true, doc: "the map of flash messages"
 
-  attr :current_scope, :map,
-    default: nil,
-    doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
-
+  attr :subtitle, :string, default: nil
+  slot :actions
   slot :inner_block, required: true
 
   def app(assigns) do
     ~H"""
-    <header class="site-header">
-      <a href="/" class="site-brand">
-        <img src={~p"/images/logo.svg"} width="36" alt="" />
-        <span>v{Application.spec(:phoenix, :vsn)}</span>
-      </a>
-      <nav>
-        <ul>
-          <li><a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a></li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
-          </li>
-        </ul>
-      </nav>
-    </header>
+    <div class="app">
+      <header class="app-header">
+        <div class="app-brand">
+          <span class="app-logo" aria-hidden="true">
+            <.icon name="hero-share" />
+          </span>
+          <span class="app-title">Wongi Engine</span>
+          <span :if={@subtitle} class="app-subtitle">{@subtitle}</span>
+        </div>
+        <div class="app-actions">{render_slot(@actions)}</div>
+      </header>
 
-    <main class="site-main">
-      {render_slot(@inner_block)}
-    </main>
+      <main class="app-main">
+        {render_slot(@inner_block)}
+      </main>
+    </div>
 
     <.flash_group flash={@flash} />
     """

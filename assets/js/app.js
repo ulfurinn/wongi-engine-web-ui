@@ -15,9 +15,9 @@
 //     import "some-package"
 //
 // Stylesheets imported here are injected by Volt in dev, and bundled into a
-// separate CSS file in production, which root.html.heex links via
-// `Volt.static_path(@conn, "/assets/css/app.css")`.
-import 'phoenix-colocated/wongi_engine_webui/colocated.css'
+// separate CSS file in production, which WongiEngineWebuiWeb.Assets serves.
+// (Volt's dev server can't pre-bundle CSS from packages, so LiveView's
+// colocated CSS is not imported; nothing uses it.)
 import '../css/app.css'
 
 // Include phoenix_html to handle method=PUT/DELETE in forms and buttons.
@@ -27,12 +27,30 @@ import { Socket } from 'phoenix'
 import { LiveSocket } from 'phoenix_live_view'
 import { hooks as colocatedHooks } from 'phoenix-colocated/wongi_engine_webui'
 import topbar from '../vendor/topbar'
+import ReteGraph from './hooks/rete_graph'
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute('content')
-const liveSocket = new LiveSocket('/live', Socket, {
+// When embedded, this is the host application's LiveView socket.
+const socketPath =
+  document.querySelector("meta[name='live-socket-path']")?.getAttribute('content') || '/live'
+const liveSocket = new LiveSocket(socketPath, Socket, {
   longPollFallbackMs: 2500,
   params: { _csrf_token: csrfToken },
-  hooks: { ...colocatedHooks }
+  hooks: { ...colocatedHooks, ReteGraph }
+})
+
+// Closes the "add clause" menus after a choice, or on a click elsewhere.
+document.addEventListener('click', (e) => {
+  for (const menu of document.querySelectorAll('details.add-menu[open]')) {
+    if (!menu.contains(e.target) || e.target.closest('.add-menu-item')) {
+      menu.removeAttribute('open')
+    }
+  }
+})
+
+// Copies the text of the dispatching target, e.g. the generated code.
+window.addEventListener('wongi:copy', (e) => {
+  navigator.clipboard?.writeText(e.target.value ?? e.target.textContent)
 })
 
 // Show progress bar on live navigation and form submits
@@ -55,7 +73,7 @@ window.liveSocket = liveSocket
 //     1. stream server logs to the browser console
 //     2. click on elements to jump to their definitions in your code editor
 //
-if (process.env.NODE_ENV === 'development') {
+if (import.meta.env.DEV) {
   window.addEventListener('phx:live_reload:attached', ({ detail: reloader }) => {
     // Enable server log streaming to client.
     // Disable with reloader.disableServerLogs()

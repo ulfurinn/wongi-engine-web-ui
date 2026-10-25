@@ -45,7 +45,9 @@ defmodule WongiEngineWebui.MixProject do
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.2.0"},
       {:lazy_html, ">= 0.1.0", only: :test},
-      {:volt, "~> 0.23"},
+      {:wongi_engine, "~> 0.9.21"},
+      {:makeup_elixir, "~> 1.0"},
+      {:volt, "~> 0.23", only: [:dev, :test]},
       {:heroicons,
        github: "tailwindlabs/heroicons",
        tag: "v2.2.0",
@@ -69,9 +71,9 @@ defmodule WongiEngineWebui.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
-      setup: ["deps.get", "assets.build"],
-      "assets.build": ["compile", "volt.build"],
-      "assets.deploy": ["compile", "volt.build", "phx.digest"],
+      setup: ["deps.get", "cmd npm install --prefix assets", "assets.build"],
+      # Builds the bundle that WongiEngineWebuiWeb.Assets embeds; commit the output.
+      "assets.build": ["compile", "volt.build --no-hash --minify --sourcemap false"],
       precommit: [
         "compile --warnings-as-errors",
         "deps.unlock --unused",

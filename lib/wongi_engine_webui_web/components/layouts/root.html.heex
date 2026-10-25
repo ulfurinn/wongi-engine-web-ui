@@ -4,20 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
-    <.live_title default="WongiEngineWebui" suffix=" · Phoenix Framework" phx-no-format>{assigns[:page_title]}</.live_title>
-    <%!-- In dev, Volt injects app.js's CSS imports itself (with HMR) --%>
-    <link
-      :if={!dev_server?(@conn)}
-      phx-track-static
-      rel="stylesheet"
-      href={Volt.static_path(@conn, "/assets/css/app.css")}
-    />
-    <script
-      defer
-      phx-track-static
-      type="module"
-      src={Volt.static_path(@conn, "/assets/js/app.js")}
-    >
+    <meta name="live-socket-path" content={@live_socket_path} />
+    <.live_title default="Wongi Engine" suffix=" · Wongi Engine">
+      {assigns[:page_title]}
+    </.live_title>
+    <link :if={@asset_css} rel="stylesheet" href={@asset_css} />
+    <script defer type="module" src={@asset_js}>
     </script>
   </head>
   <body>

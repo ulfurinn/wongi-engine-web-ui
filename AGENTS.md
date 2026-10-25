@@ -21,8 +21,10 @@ custom classes must fully style the input
 ### JS and CSS guidelines
 
 - **Do not use Tailwind CSS or daisyUI.** Styling is plain, hand-written CSS in `assets/css/app.css`, using semantic class names
-- Assets are built by **Volt** (`config :volt` in `config/config.exs`), not esbuild. In dev, `Volt.DevServer` (in `endpoint.ex`) serves and hot-reloads assets; in prod, `mix assets.deploy` runs `volt.build` and `phx.digest`
-- Reference Volt-managed assets in layouts with `Volt.static_path(@conn, "/assets/...")`, not `~p`
+- Assets are built by **Volt** (`config :volt` in `config/config.exs`), not esbuild. In dev, `Volt.DevServer` (in `endpoint.ex`) serves and hot-reloads assets
+- This project is a library mounted in host routers (`WongiEngineWebui.Router`). Host apps don't build assets: `mix assets.build` writes the bundle to `priv/assets`, which is committed and embedded by `WongiEngineWebuiWeb.Assets`. **Rebuild it after changing anything in `assets/`**
+- Asset URLs in the root layout come from `WongiEngineWebuiWeb.Layouts.asset_assigns/2`. Don't use `~p` for paths in the UI: it is mounted under an arbitrary prefix in host routers
+- The standalone endpoint only starts with `WONGI_ENGINE_WEBUI_SERVER=1` (or `config :wongi_engine_webui, standalone: true`, as in tests)
 - Out of the box **only the app.js and app.css bundles are supported**
   - You cannot reference an external vendor'd script `src` or link `href` in the layouts
   - You must import the vendor deps into app.js and app.css to use them
