@@ -10,6 +10,40 @@ defmodule WongiEngineWebuiWeb.Layouts do
   # `@asset_js`, `@asset_css` and `@live_socket_path` (see `asset_assigns/2`).
   embed_templates "layouts/*"
 
+  @logo_path Path.expand("../../../assets/images/wongi.svg", __DIR__)
+  @external_resource @logo_path
+  @logo_d @logo_path |> File.read!() |> then(&Regex.run(~r/\sd="([^"]+)"/, &1)) |> List.last()
+
+  @doc "The project logo (cherries), inline, in the current text colour."
+  attr :class, :any, default: nil
+
+  def logo(assigns) do
+    assigns = assign(assigns, :d, @logo_d)
+
+    ~H"""
+    <svg
+      class={@class}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 170.1 170.1"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d={@d} />
+    </svg>
+    """
+  end
+
+  # A data URI, so the favicon works wherever the UI is mounted.
+  @favicon "data:image/svg+xml," <>
+             URI.encode(
+               ~s(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170.1 170.1">) <>
+                 ~s(<path fill="#63a" d="#{@logo_d}"/></svg>),
+               &URI.char_unreserved?/1
+             )
+
+  @doc false
+  def favicon, do: @favicon
+
   @doc """
   Asset URLs for the root layout.
 
@@ -53,9 +87,7 @@ defmodule WongiEngineWebuiWeb.Layouts do
     <div class="app">
       <header class="app-header">
         <div class="app-brand">
-          <span class="app-logo" aria-hidden="true">
-            <.icon name="hero-share" />
-          </span>
+          <span class="app-logo"><.logo /></span>
           <span class="app-title">Wongi Engine</span>
           <span :if={@subtitle} class="app-subtitle">{@subtitle}</span>
         </div>

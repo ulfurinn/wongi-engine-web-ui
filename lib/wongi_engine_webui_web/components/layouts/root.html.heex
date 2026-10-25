@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
     <meta name="live-socket-path" content={@live_socket_path} />
+    <link rel="icon" type="image/svg+xml" href={favicon()} />
     <.live_title default="Wongi Engine" suffix=" · Wongi Engine">
       {assigns[:page_title]}
     </.live_title>
