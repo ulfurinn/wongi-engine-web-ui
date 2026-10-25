@@ -1,5 +1,7 @@
 [
   import_deps: [:phoenix],
+  locals_without_parens: [wongi_engine_webui: 1, wongi_engine_webui: 2],
+  export: [locals_without_parens: [wongi_engine_webui: 1, wongi_engine_webui: 2]],
   plugins: [Phoenix.LiveView.HTMLFormatter, Volt.Formatter],
   inputs: [
     "*.{heex,ex,exs}",

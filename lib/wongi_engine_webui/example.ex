@@ -46,23 +46,32 @@ defmodule WongiEngineWebui.Example do
     ]
   end
 
-  @doc "An engine with the example rules and some facts, plus the rules."
+  @doc "Some facts for the example rules."
+  def facts do
+    [
+      {:alice, :is_a, :person},
+      {:alice, :age, 7},
+      {:alice, :parent, :bob},
+      {:bob, :is_a, :person},
+      {:bob, :age, 35},
+      {:bob, :parent, :carol},
+      {:carol, :is_a, :person},
+      {:carol, :age, 64},
+      {:dave, :is_a, :person},
+      {:dave, :age, 30}
+    ]
+  end
+
+  @doc "An engine with the example rules and facts, plus the rules."
   def engine do
     rules = rules()
-
-    engine =
-      Enum.reduce(rules, Wongi.Engine.new(), &Wongi.Engine.compile(&2, &1))
-      |> Wongi.Engine.assert(:alice, :is_a, :person)
-      |> Wongi.Engine.assert(:alice, :age, 7)
-      |> Wongi.Engine.assert(:alice, :parent, :bob)
-      |> Wongi.Engine.assert(:bob, :is_a, :person)
-      |> Wongi.Engine.assert(:bob, :age, 35)
-      |> Wongi.Engine.assert(:bob, :parent, :carol)
-      |> Wongi.Engine.assert(:carol, :is_a, :person)
-      |> Wongi.Engine.assert(:carol, :age, 64)
-      |> Wongi.Engine.assert(:dave, :is_a, :person)
-      |> Wongi.Engine.assert(:dave, :age, 30)
-
-    {engine, rules}
+    engine = Enum.reduce(rules, Wongi.Engine.new(), &Wongi.Engine.compile(&2, &1))
+    {Enum.reduce(facts(), engine, &Wongi.Engine.assert(&2, &1)), rules}
   end
+
+  @doc """
+  Whether the standalone editor evaluates code: only when
+  `WONGI_ENGINE_WEBUI_EVALUATE` is set.
+  """
+  def evaluate?, do: System.get_env("WONGI_ENGINE_WEBUI_EVALUATE") in ~w(1 true)
 end

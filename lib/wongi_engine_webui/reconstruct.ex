@@ -15,8 +15,8 @@ defmodule WongiEngineWebui.Reconstruct do
   alias Wongi.Engine.DSL
   alias Wongi.Engine.DSL.Var
   alias Wongi.Engine.Filter
-  alias WongiEngineWebui.Expr
   alias WongiEngineWebui.Spec
+  alias WongiEngineWebui.Value
 
   @filter_ops %{
     Filter.Equal => "equal",
@@ -234,14 +234,10 @@ defmodule WongiEngineWebui.Reconstruct do
   Elixir source for a runtime value. Anonymous functions can't be recovered
   and are shown as `fn ... -> ... end` of the right arity.
   """
-  def source(value) do
-    case Expr.source(value) do
-      {:ok, source} -> source
-      :error -> value_source(value)
-    end
-  end
+  def source(value), do: Value.to_source(value)
 
-  defp value_source(fun) when is_function(fun) do
+  @doc false
+  def function_source(fun) when is_function(fun) do
     info = Function.info(fun)
 
     case info[:type] do
@@ -253,8 +249,6 @@ defmodule WongiEngineWebui.Reconstruct do
         "fn#{args} -> ... end"
     end
   end
-
-  defp value_source(value), do: inspect(value, limit: 20, printable_limit: 120)
 
   # Functions in scope under `use Wongi.Engine.DSL` are written unqualified.
   defp qualifier(Wongi.Engine.Aggregates, _name, _arity), do: ""

@@ -17,7 +17,10 @@ defmodule WongiEngineWebui.Expr do
 
   @type t() :: %__MODULE__{source: String.t()}
 
-  @doc "Parses `source`, returning its AST with atoms encoded as `{:atom, name}`."
+  @doc """
+  Parses `source`, returning its AST with atoms (including identifiers)
+  encoded as `%WongiEngineWebui.Value.Atom{}`.
+  """
   @spec parse(String.t()) :: {:ok, Macro.t()} | {:error, String.t()}
   def parse(source) when is_binary(source) do
     case String.trim(source) do
@@ -26,7 +29,9 @@ defmodule WongiEngineWebui.Expr do
 
       trimmed ->
         case Code.string_to_quoted(trimmed,
-               static_atoms_encoder: fn name, _meta -> {:ok, {:atom, name}} end,
+               static_atoms_encoder: fn name, _meta ->
+                 {:ok, %WongiEngineWebui.Value.Atom{name: name}}
+               end,
                existing_atoms_only: true
              ) do
           {:ok, ast} -> {:ok, ast}
@@ -81,6 +86,9 @@ defmodule WongiEngineWebui.Expr do
         %__MODULE__{source: source}
     end
   end
+
+  @doc "Returns `true` for `%Expr{}` constants and placeholder functions."
+  def stand_in?(value), do: source(value) != :error
 
   @doc "Returns the source of a placeholder function or `%Expr{}`, if it is one."
   @spec source(any()) :: {:ok, String.t()} | :error

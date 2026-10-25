@@ -227,18 +227,13 @@ textarea {
   grid-template-rows: minmax(0, 1fr);
 }
 
-.workspace-readonly {
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 480px);
-}
-
 @media (max-width: 1100px) {
   .app {
     height: auto;
     min-height: 100vh;
   }
 
-  .workspace,
-  .workspace-readonly {
+  .workspace {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
   }
@@ -249,6 +244,7 @@ textarea {
 }
 
 .panel {
+  position: relative;
   min-height: 0;
   overflow: auto;
   background: var(--surface);
@@ -452,9 +448,84 @@ textarea {
    Rule editor
    ------------------------------------------------------------------------ */
 
-.rule-tabs {
+.panel-tabs {
   position: sticky;
   top: 0;
+  z-index: 3;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.panel-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: -1px;
+  padding: 0.6rem 0.5rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    color 120ms var(--ease),
+    border-color 120ms var(--ease);
+}
+
+.panel-tab:hover {
+  color: var(--text);
+}
+
+.panel-tab.active {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.panel-tab-count {
+  min-width: 1.4em;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.panel-tab.active .panel-tab-count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--type-assign) 12%, transparent);
+  color: var(--type-assign);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: help;
+}
+
+.mode-badge-warning {
+  background: color-mix(in srgb, var(--type-any) 15%, transparent);
+  color: var(--type-any);
+}
+
+#rules-panel > .compile-error {
+  margin: 0.75rem 0.75rem 0;
+}
+
+.rule-tabs {
+  position: sticky;
+  top: 41px;
   z-index: 2;
   display: flex;
   flex-wrap: wrap;
@@ -1119,3 +1190,174 @@ textarea {
 .code-block .o { color: var(--text-muted); }
 .code-block .c,
 .code-block .c1 { color: var(--text-faint); font-style: italic; }
+
+/* ---------------------------------------------------------------------------
+   Facts
+   ------------------------------------------------------------------------ */
+
+.facts-panel {
+  padding: 0.75rem;
+}
+
+.facts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.facts-header .section-title {
+  margin: 0;
+}
+
+.fact-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.fact-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: start;
+  gap: 0.3rem;
+  animation: item-in 160ms var(--ease);
+}
+
+.fact-row .icon-btn {
+  margin-top: 3px;
+  opacity: 0.5;
+}
+
+.fact-row:hover .icon-btn,
+.fact-row:focus-within .icon-btn {
+  opacity: 1;
+}
+
+.import {
+  position: relative;
+}
+
+.import-form {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 320px;
+  padding: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.import-form .btn {
+  align-self: flex-end;
+}
+
+.import-hint {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.fact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font: 12px var(--mono);
+  animation: item-in 160ms var(--ease);
+}
+
+#inferred-facts .fact {
+  background: color-mix(in srgb, var(--type-production) 6%, var(--surface));
+  box-shadow: inset 2px 0 0 var(--type-production);
+}
+
+.fact-part {
+  overflow-wrap: anywhere;
+}
+
+.code-facts {
+  margin-top: 0.5rem;
+}
+
+.empty-list code {
+  font-family: var(--mono);
+}
+
+/* ---------------------------------------------------------------------------
+   Token flow and stand-ins on the graph
+   ------------------------------------------------------------------------ */
+
+.graph-edge-active {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.graph-edge-label rect {
+  fill: var(--accent);
+}
+
+.graph-edge-label text {
+  fill: white;
+  font: 600 10px var(--mono);
+  text-anchor: middle;
+}
+
+.graph-edge-label {
+  transition: opacity 150ms var(--ease);
+  animation: node-in 220ms var(--ease);
+}
+
+.graph-edge-label.dimmed {
+  opacity: 0.28;
+}
+
+.graph-node.stand-in .graph-node-box {
+  stroke-dasharray: 4 3;
+  stroke: var(--text-faint);
+}
+
+.stand-in-note {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.legend-note {
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--border);
+}
+
+.legend-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: white;
+  font: 600 9px var(--mono);
+}

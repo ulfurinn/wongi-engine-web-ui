@@ -2,10 +2,11 @@ defmodule WongiEngineWebuiWeb.EngineLive do
   @moduledoc """
   The rule editor and network viewer.
 
-  Without an engine in the session it is an editor: rules are edited as specs,
-  compiled into a fresh engine on every change, and the resulting network is
-  drawn. With an engine (see `WongiEngineWebui.Router`) it is read-only and
-  shows that engine's network and rules.
+  Without an engine in the session it is an editor and playground: rules and
+  facts are edited as specs, compiled into a fresh engine on every change, and
+  the resulting network is drawn with the tokens the facts produced. With an
+  engine (see `WongiEngineWebui.Router`) it is read-only and shows that
+  engine's network, rules and facts.
   """
   use WongiEngineWebuiWeb, :live_view
 
@@ -14,6 +15,8 @@ defmodule WongiEngineWebuiWeb.EngineLive do
   alias WongiEngineWebui.Network
   alias WongiEngineWebui.Reconstruct
   alias WongiEngineWebui.Spec
+  alias WongiEngineWebui.Value
+  alias WongiEngineWebuiWeb.FactComponents
   alias WongiEngineWebuiWeb.RuleComponents
 
   @node_types [
@@ -45,15 +48,25 @@ defmodule WongiEngineWebuiWeb.EngineLive do
     socket =
       case session["engine"] do
         nil ->
-          rules = initial_rules(session["initial_rules"])
-          assign(socket, mode: :editor, page_title: "Editor", rules: rules, selected_rule: 0)
+          assign(socket,
+            mode: :editor,
+            page_title: "Editor",
+            tab: :rules,
+            evaluate: evaluate?(session["evaluate"]),
+            rules: initial_rules(session["initial_rules"]),
+            facts: initial_facts(session["initial_facts"]),
+            selected_rule: 0
+          )
 
         _mfa ->
-          assign(socket, mode: :readonly, page_title: "Engine")
+          assign(socket, mode: :readonly, page_title: "Engine", tab: :facts, evaluate: false)
       end
 
     {:ok, refresh(socket)}
   end
+
+  defp evaluate?({m, f, a}), do: apply(m, f, a) == true
+  defp evaluate?(flag), do: flag == true
 
   defp initial_rules(nil) do
     rule =
@@ -68,47 +81,79 @@ defmodule WongiEngineWebuiWeb.EngineLive do
     [rule]
   end
 
-  defp initial_rules({m, f, a}), do: apply(m, f, a) |> Enum.map(&Reconstruct.from_rule/1)
+  # Rule specs are accepted as well as DSL rules, so that rules can be
+  # restored with their code intact.
+  defp initial_rules({m, f, a}) do
+    for rule <- apply(m, f, a) do
+      case rule do
+        %Wongi.Engine.DSL.Rule{} -> Reconstruct.from_rule(rule)
+        %{clauses: _} = spec -> Map.put_new(spec, :id, Spec.new_rule().id)
+      end
+    end
+  end
+
+  defp initial_facts(nil), do: []
+
+  defp initial_facts({m, f, a}) do
+    for {s, p, o} <- apply(m, f, a),
+        do: Spec.new_fact(Value.to_source(s), Value.to_source(p), Value.to_source(o))
+  end
 
   ## Compilation
 
-  # Recomputes everything derived from the rules (or the engine) and pushes the
-  # graph to the client.
-  defp refresh(%{assigns: %{mode: :editor, rules: rules}} = socket) do
+  # Recomputes everything derived from the rules and facts (or the engine) and
+  # pushes the graph to the client.
+  defp refresh(%{assigns: %{mode: :editor, rules: rules, facts: facts}} = socket) do
+    mode = if socket.assigns.evaluate, do: :evaluate, else: :safe
     errors = Enum.map(rules, &Builder.validate/1)
 
-    {engine, compiled, compile_errors} =
-      rules
-      |> Enum.zip(errors)
+    fact_errors =
+      facts
       |> Enum.with_index()
-      |> Enum.reduce({Wongi.Engine.new(), [], %{}}, fn
-        {{rule, errors}, index}, {engine, compiled, compile_errors} when errors == %{} ->
-          try do
-            {engine, ref} = Wongi.Engine.compile_and_get_ref(engine, Builder.to_rule(rule))
-
-            {engine, [{index, ref, RuleComponents.rule_label(rule, index)} | compiled],
-             compile_errors}
-          rescue
-            e -> {engine, compiled, Map.put(compile_errors, index, Exception.message(e))}
-          end
-
-        _, acc ->
-          acc
+      |> Enum.reduce(%{}, fn {fact, index}, acc ->
+        Map.merge(acc, Builder.validate_fact(fact, index, mode))
       end)
 
+    state = %{
+      engine: Wongi.Engine.new(),
+      compiled: [],
+      errors: errors,
+      compile_errors: %{},
+      fact_errors: fact_errors,
+      facts_error: nil,
+      asserted: []
+    }
+
+    {state, names, context_error} =
+      case Builder.context(rules, mode) do
+        {:ok, ctx} ->
+          {state |> compile_rules(rules, ctx) |> assert_facts(facts, ctx), ctx.names, nil}
+
+        {:error, message} ->
+          {state, %{}, message}
+      end
+
     invalid =
-      errors
+      state.errors
       |> Enum.with_index()
       |> Enum.reject(fn {errors, _index} -> errors == %{} end)
-      |> Enum.map(&elem(&1, 1))
-      |> MapSet.new()
-      |> MapSet.union(MapSet.new(Map.keys(compile_errors)))
+      |> MapSet.new(&elem(&1, 1))
+      |> MapSet.union(MapSet.new(Map.keys(state.compile_errors)))
 
     socket
-    |> assign(errors: errors, compile_errors: compile_errors, invalid: invalid)
-    |> assign_form()
+    |> assign(
+      errors: state.errors,
+      compile_errors: state.compile_errors,
+      context_error: context_error,
+      fact_errors: state.fact_errors,
+      facts_error: state.facts_error,
+      invalid: invalid,
+      asserted: state.asserted,
+      inferred: inferred(state.engine)
+    )
+    |> assign_forms()
     |> assign_code()
-    |> push_graph(Network.build(engine, Enum.reverse(compiled)))
+    |> push_graph(Network.build(state.engine, Enum.reverse(state.compiled), names: names))
   end
 
   defp refresh(%{assigns: %{mode: :readonly, engine_mfa: {m, f, a}}} = socket) do
@@ -119,7 +164,6 @@ defmodule WongiEngineWebuiWeb.EngineLive do
       end
 
     specs = Reconstruct.rules(engine, rules)
-    rules = Enum.map(specs, &elem(&1, 1))
 
     labels =
       specs
@@ -128,27 +172,97 @@ defmodule WongiEngineWebuiWeb.EngineLive do
         {index, ref, RuleComponents.rule_label(spec, index)}
       end)
 
+    asserted = engine.manual |> Enum.map(&triple/1) |> Enum.sort()
+
     socket
-    |> assign(rules: rules, invalid: MapSet.new())
+    |> assign(
+      rules: Enum.map(specs, &elem(&1, 1)),
+      invalid: MapSet.new(),
+      asserted: asserted,
+      inferred: inferred(engine)
+    )
     |> assign_code()
     |> push_graph(Network.build(engine, labels))
   end
 
-  defp assign_form(%{assigns: %{selected_rule: nil}} = socket), do: assign(socket, form: nil)
-
-  defp assign_form(%{assigns: %{rules: rules, selected_rule: index}} = socket) do
-    form = rules |> Enum.at(index) |> Spec.flatten() |> to_form(as: :rule)
-    assign(socket, form: form)
+  defp compile_rules(state, rules, ctx) do
+    rules
+    |> Enum.with_index()
+    |> Enum.reduce(state, fn {rule, index}, state ->
+      if Enum.at(state.errors, index) == %{} do
+        compile_rule(state, rule, index, ctx)
+      else
+        state
+      end
+    end)
   end
 
-  defp assign_code(%{assigns: %{rules: rules}} = socket) do
+  defp compile_rule(state, rule, index, ctx) do
+    {engine, ref} = Wongi.Engine.compile_and_get_ref(state.engine, Builder.to_rule(rule, ctx))
+    label = RuleComponents.rule_label(rule, index)
+    %{state | engine: engine, compiled: [{index, ref, label} | state.compiled]}
+  rescue
+    e in Builder.Error ->
+      %{state | errors: List.update_at(state.errors, index, &Map.put(&1, e.path, e.message))}
+
+    e ->
+      %{state | compile_errors: Map.put(state.compile_errors, index, Exception.message(e))}
+  end
+
+  defp assert_facts(state, facts, ctx) do
+    facts
+    |> Enum.with_index()
+    |> Enum.reduce(state, fn {fact, index}, state ->
+      if Enum.any?([:s, :p, :o], &Map.has_key?(state.fact_errors, "facts.#{index}.#{&1}")),
+        do: state,
+        else: assert_fact(state, fact, index, ctx)
+    end)
+  end
+
+  defp assert_fact(state, fact, index, ctx) do
+    fact = Builder.to_fact(fact, index, ctx)
+    engine = Wongi.Engine.assert(state.engine, fact)
+    %{state | engine: engine, asserted: state.asserted ++ [triple(fact)]}
+  rescue
+    e in Builder.Error ->
+      %{state | fact_errors: Map.put(state.fact_errors, e.path, e.message)}
+
+    # Raised by rule code running as the fact propagates (evaluate mode).
+    e ->
+      %{state | facts_error: "fact #{index + 1}: " <> Exception.message(e)}
+  end
+
+  defp inferred(engine) do
+    engine
+    |> Wongi.Engine.select(:_, :_, :_)
+    |> Enum.reject(&MapSet.member?(engine.manual, &1))
+    |> Enum.map(&triple/1)
+    |> Enum.sort()
+  end
+
+  defp triple({s, p, o}), do: {Value.to_source(s), Value.to_source(p), Value.to_source(o)}
+  defp triple(wme), do: triple({wme.subject, wme.predicate, wme.object})
+
+  defp assign_forms(%{assigns: %{rules: rules, selected_rule: index, facts: facts}} = socket) do
+    form = if index, do: rules |> Enum.at(index) |> Spec.flatten() |> to_form(as: :rule)
+    facts_form = %{facts: facts} |> Spec.flatten() |> to_form(as: :facts)
+    assign(socket, form: form, facts_form: facts_form)
+  end
+
+  defp assign_code(%{assigns: %{rules: rules, asserted: asserted}} = socket) do
     code =
       Enum.map(rules, fn rule ->
         source = Codegen.rule(rule)
         %{source: source, html: Codegen.highlight(source)}
       end)
 
-    assign(socket, code: code)
+    facts_code =
+      if asserted != [] do
+        source = Codegen.facts(asserted)
+        %{source: source, html: Codegen.highlight(source)}
+      end
+
+    assign(socket, code: code, facts_code: facts_code)
   end
 
   defp push_graph(socket, graph) do
@@ -187,7 +301,7 @@ defmodule WongiEngineWebuiWeb.EngineLive do
 
     socket
     |> assign(selected_rule: index)
-    |> then(&if(&1.assigns.mode == :editor, do: assign_form(&1), else: &1))
+    |> then(&if(&1.assigns.mode == :editor, do: assign_forms(&1), else: &1))
     |> push_selection()
     |> noreply()
   end
@@ -197,6 +311,10 @@ defmodule WongiEngineWebuiWeb.EngineLive do
     |> assign(selected_node: id && socket.assigns.nodes[id])
     |> push_selection()
     |> noreply()
+  end
+
+  def handle_event("tab", %{"tab" => tab}, socket) when tab in ~w(rules facts) do
+    socket |> assign(tab: String.to_existing_atom(tab)) |> noreply()
   end
 
   def handle_event("reload", _params, %{assigns: %{mode: :readonly}} = socket) do
@@ -253,11 +371,46 @@ defmodule WongiEngineWebuiWeb.EngineLive do
     |> noreply()
   end
 
+  def handle_event("change_facts", %{"facts" => params}, socket) do
+    update_facts(socket, &Spec.apply_params(%{facts: &1}, params).facts)
+  end
+
+  def handle_event("add_fact", _params, socket) do
+    update_facts(socket, &(&1 ++ [Spec.new_fact()]))
+  end
+
+  def handle_event("remove_fact", %{"index" => index}, socket) do
+    update_facts(socket, &List.delete_at(&1, String.to_integer(index)))
+  end
+
+  def handle_event("clear_facts", _params, socket) do
+    update_facts(socket, fn _ -> [] end)
+  end
+
+  def handle_event("import_facts", %{"import" => %{"text" => text}}, socket) do
+    case FactComponents.parse_import(text) do
+      {:ok, facts} ->
+        socket
+        |> put_flash(:info, "Added #{length(facts)} fact(s)")
+        |> update_facts(&(&1 ++ facts))
+
+      {:error, message} ->
+        socket |> put_flash(:error, message) |> noreply()
+    end
+  end
+
   defp update_rule(%{assigns: %{selected_rule: nil}} = socket, _fun), do: noreply(socket)
 
   defp update_rule(%{assigns: %{rules: rules, selected_rule: index}} = socket, fun) do
     socket
     |> assign(rules: List.update_at(rules, index, fun))
+    |> refresh()
+    |> noreply()
+  end
+
+  defp update_facts(socket, fun) do
+    socket
+    |> assign(facts: fun.(socket.assigns.facts))
     |> refresh()
     |> noreply()
   end
@@ -274,6 +427,20 @@ defmodule WongiEngineWebuiWeb.EngineLive do
       subtitle={if @mode == :editor, do: "Rule editor", else: "Read-only"}
     >
       <:actions>
+        <span
+          :if={@mode == :editor}
+          id="evaluation-mode"
+          class={["mode-badge", @evaluate && "mode-badge-warning"]}
+          title={
+            if @evaluate,
+              do: "Code typed into the editor is evaluated on the server.",
+              else:
+                "Code is not evaluated: only literals and known pure functions take effect; other functions are stand-ins."
+          }
+        >
+          <.icon name={if @evaluate, do: "hero-bolt-mini", else: "hero-shield-check-mini"} />
+          {if @evaluate, do: "evaluating code", else: "safe mode"}
+        </span>
         <button
           :if={@mode == :readonly}
           id="reload-engine"
@@ -285,20 +452,58 @@ defmodule WongiEngineWebuiWeb.EngineLive do
         </button>
       </:actions>
 
-      <div class={["workspace", "workspace-#{@mode}"]}>
-        <aside :if={@mode == :editor} id="editor" class="panel panel-editor">
-          <RuleComponents.rule_tabs rules={@rules} selected={@selected_rule} invalid={@invalid} />
-          <RuleComponents.rule_form
-            :if={@selected_rule}
-            form={@form}
-            rule={Enum.at(@rules, @selected_rule)}
-            index={@selected_rule}
-            errors={Enum.at(@errors, @selected_rule)}
-            compile_error={@compile_errors[@selected_rule]}
-          />
-          <div :if={@rules == []} class="empty-state">
-            <p>No rules yet.</p>
+      <div class="workspace">
+        <aside id="editor" class="panel panel-editor">
+          <nav class="panel-tabs" aria-label="Panels">
+            <button
+              :if={@mode == :editor}
+              id="tab-rules"
+              type="button"
+              class={["panel-tab", @tab == :rules && "active"]}
+              phx-click="tab"
+              phx-value-tab="rules"
+            >
+              Rules <span class="panel-tab-count">{length(@rules)}</span>
+            </button>
+            <button
+              id="tab-facts"
+              type="button"
+              class={["panel-tab", @tab == :facts && "active"]}
+              phx-click="tab"
+              phx-value-tab="facts"
+            >
+              Facts <span class="panel-tab-count">{length(@asserted) + length(@inferred)}</span>
+            </button>
+          </nav>
+
+          <div :if={@tab == :rules} id="rules-panel">
+            <p :if={@context_error} class="compile-error">
+              <.icon name="hero-exclamation-triangle" /> {@context_error}
+            </p>
+            <RuleComponents.rule_tabs rules={@rules} selected={@selected_rule} invalid={@invalid} />
+            <RuleComponents.rule_form
+              :if={@selected_rule}
+              form={@form}
+              rule={Enum.at(@rules, @selected_rule)}
+              index={@selected_rule}
+              errors={Enum.at(@errors, @selected_rule)}
+              compile_error={@compile_errors[@selected_rule]}
+            />
+            <div :if={@rules == []} class="empty-state">
+              <p>No rules yet.</p>
+            </div>
           </div>
+
+          <FactComponents.facts_panel
+            :if={@tab == :facts}
+            editable={@mode == :editor}
+            form={@mode == :editor && @facts_form}
+            facts={if @mode == :editor, do: @facts, else: []}
+            errors={if @mode == :editor, do: @fact_errors, else: %{}}
+            facts_error={@mode == :editor && @facts_error}
+            asserted={@asserted}
+            inferred={@inferred}
+          />
         </aside>
 
         <section class="panel panel-graph" aria-label="Rete network">
@@ -333,6 +538,9 @@ defmodule WongiEngineWebuiWeb.EngineLive do
             <li :for={{type, label} <- @node_types}>
               <span class={["type-dot", "node-#{type}"]} />{label}
             </li>
+            <li class="legend-note">
+              <span class="legend-count">3</span> tokens passed on
+            </li>
           </ul>
         </section>
 
@@ -354,9 +562,14 @@ defmodule WongiEngineWebuiWeb.EngineLive do
               </button>
             </header>
             <pre :if={@selected_node.detail} class="code-block"><code>{Codegen.highlight(@selected_node.detail)}</code></pre>
+            <p :if={@selected_node.stand_in} class="stand-in-note">
+              <.icon name="hero-information-circle-mini" />
+              Contains code that isn't evaluated in safe mode: functions are stand-ins
+              (filters pass, actions do nothing) and other expressions match nothing.
+            </p>
             <dl class="facts">
               <div>
-                <dt>tokens</dt>
+                <dt>{if @selected_node.type == "production", do: "matches", else: "tokens in"}</dt>
                 <dd>{@selected_node.tokens}</dd>
               </div>
               <div>
@@ -403,11 +616,18 @@ defmodule WongiEngineWebuiWeb.EngineLive do
               <pre class="code-block"><code>{block.html}</code></pre>
             </div>
             <p :if={@code == []} class="empty-list">No rules.</p>
-            <textarea id="code-source" class="sr-only" readonly aria-hidden="true">{Enum.map_join(["use Wongi.Engine.DSL" | Enum.map(@code, & &1.source)], "\n\n", & &1)}</textarea>
+            <pre :if={@facts_code} id="code-facts" class="code-block code-facts"><code>{@facts_code.html}</code></pre>
+            <textarea id="code-source" class="sr-only" readonly aria-hidden="true">{code_source(@code, @facts_code)}</textarea>
           </section>
         </aside>
       </div>
     </Layouts.app>
     """
+  end
+
+  defp code_source(code, facts_code) do
+    blocks = ["use Wongi.Engine.DSL" | Enum.map(code, & &1.source)]
+    blocks = if facts_code, do: blocks ++ [facts_code.source], else: blocks
+    Enum.join(blocks, "\n\n")
   end
 end

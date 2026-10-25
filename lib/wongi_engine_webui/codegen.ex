@@ -22,6 +22,16 @@ defmodule WongiEngineWebui.Codegen do
     format("rule(" <> Enum.join(args, ", ") <> ")")
   end
 
+  @doc "A list of facts, as `{subject, predicate, object}` source triples."
+  @spec facts([{String.t(), String.t(), String.t()}]) :: String.t()
+  def facts(triples) do
+    format(
+      "facts = [" <>
+        Enum.map_join(triples, ", ", fn {s, p, o} -> "{#{src(s)}, #{src(p)}, #{src(o)}}" end) <>
+        "]"
+    )
+  end
+
   @doc "The source of a single clause, unformatted."
   @spec clause(map()) :: String.t()
   def clause(%{type: type} = c) when type in ~w(has neg) do

@@ -19,6 +19,7 @@ const NODE = {
 
 const TITLE_FONT = '600 11px ui-sans-serif, system-ui, sans-serif'
 const DETAIL_FONT = '12px ui-monospace, SFMono-Regular, Menlo, monospace'
+const LABEL_FONT = '600 10px ui-monospace, SFMono-Regular, Menlo, monospace'
 
 const LAYOUT_OPTIONS = {
   'elk.algorithm': 'layered',
@@ -111,6 +112,7 @@ export default {
     this.viewport = svg('g', { class: 'graph-viewport' }, this.svg)
     this.edgeLayer = svg('g', { class: 'graph-edges' }, this.viewport)
     this.nodeLayer = svg('g', { class: 'graph-nodes' }, this.viewport)
+    this.labelLayer = svg('g', { class: 'graph-edge-labels' }, this.viewport)
 
     this.installPanZoom()
     this.el.addEventListener('wongi:fit', () => this.fit(true))
@@ -159,20 +161,23 @@ export default {
     this.bounds = { width: layout.width, height: layout.height }
 
     this.edgeLayer.replaceChildren()
+    this.labelLayer.replaceChildren()
     layout.edges.forEach((laidOut, index) => {
       const edge = graph.edges[index]
+      const active = edge.count > 0
       for (const section of laidOut.sections || []) {
-        svg(
+        const path = svg(
           'path',
           {
             d: edgePath(section),
-            class: `graph-edge graph-edge-${edge.kind}`,
+            class: `graph-edge graph-edge-${edge.kind}${active ? ' graph-edge-active' : ''}`,
             'data-source': edge.source,
             'data-target': edge.target,
             'marker-end': 'url(#graph-arrow)'
           },
           this.edgeLayer
         )
+        if (active) this.edgeLabel(path, edge)
       }
     })
 
@@ -183,7 +188,7 @@ export default {
       const g = svg(
         'g',
         {
-          class: `graph-node node-${node.type}`,
+          class: `graph-node node-${node.type}${node.stand_in ? ' stand-in' : ''}`,
           transform: `translate(${x},${y})`,
           'data-id': node.id,
           tabindex: '0',
@@ -202,14 +207,19 @@ export default {
       )
       title.textContent = node.title.toUpperCase()
 
-      if (node.tokens > 0) {
+      if (node.type === 'production' && node.tokens > 0) {
         const badge = svg(
           'text',
           { class: 'graph-node-tokens', x: width - NODE.paddingX, y: NODE.paddingTop + 11 },
           g
         )
-        badge.textContent = `${node.tokens}`
-        svg('title', {}, badge).textContent = `${node.tokens} token(s)`
+        badge.textContent = `${node.tokens}×`
+        svg('title', {}, badge).textContent = `matched ${node.tokens} time(s)`
+      }
+
+      if (node.stand_in) {
+        svg('title', {}, g).textContent =
+          `${node.detail || node.title}\n(contains code that isn't evaluated in safe mode)`
       }
 
       if (detail) {
@@ -224,7 +234,9 @@ export default {
         )
         text.textContent = detail
       }
-      if (node.detail && detail !== node.detail) svg('title', {}, g).textContent = node.detail
+      if (!node.stand_in && node.detail && detail !== node.detail) {
+        svg('title', {}, g).textContent = node.detail
+      }
 
       g.addEventListener('click', (e) => {
         e.stopPropagation()
@@ -251,10 +263,31 @@ export default {
       g.classList.toggle('dimmed', !inRule(id))
       g.classList.toggle('selected', id === selectedId)
     }
-    for (const path of this.edgeLayer.querySelectorAll('.graph-edge')) {
-      const active = inRule(path.dataset.source) && inRule(path.dataset.target)
-      path.classList.toggle('dimmed', !active)
+    for (const el of this.viewport.querySelectorAll('.graph-edge, .graph-edge-label')) {
+      const active = inRule(el.dataset.source) && inRule(el.dataset.target)
+      el.classList.toggle('dimmed', !active)
     }
+  },
+
+  // A pill with the number of tokens that went along an edge, at its middle.
+  edgeLabel(path, edge) {
+    const point = path.getPointAtLength(path.getTotalLength() / 2)
+    const text = `${edge.count}`
+    const width = Math.max(18, textWidth(text, LABEL_FONT) + 10)
+    const g = svg(
+      'g',
+      {
+        class: 'graph-edge-label',
+        transform: `translate(${point.x},${point.y})`,
+        'data-source': edge.source,
+        'data-target': edge.target
+      },
+      this.labelLayer
+    )
+    svg('rect', { x: -width / 2, y: -8, width, height: 16, rx: '8' }, g)
+    const label = svg('text', { x: 0, y: 4 }, g)
+    label.textContent = text
+    svg('title', {}, g).textContent = `${edge.count} token(s) passed on`
   },
 
   // Pan with the pointer, zoom with the wheel or the toolbar.

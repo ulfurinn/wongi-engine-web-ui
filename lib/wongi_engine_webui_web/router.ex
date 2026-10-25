@@ -18,11 +18,13 @@ defmodule WongiEngineWebuiWeb.Router do
   scope "/" do
     pipe_through :browser
 
-    wongi_engine_webui("/example",
+    wongi_engine_webui "/example",
       engine: {WongiEngineWebui.Example, :engine, []},
       live_session_name: :wongi_engine_webui_example
-    )
 
-    wongi_engine_webui("/", initial_rules: {WongiEngineWebui.Example, :rules, []})
+    wongi_engine_webui "/",
+      initial_rules: {WongiEngineWebui.Example, :rules, []},
+      initial_facts: {WongiEngineWebui.Example, :facts, []},
+      evaluate: {WongiEngineWebui.Example, :evaluate?, []}
   end
 end

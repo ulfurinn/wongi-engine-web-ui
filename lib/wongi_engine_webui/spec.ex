@@ -27,7 +27,7 @@ defmodule WongiEngineWebui.Spec do
   @action_types ~w(gen code)
   @filter_ops ~w(equal diff less lte greater gte in_list not_in_list)
 
-  @keys ~w(name clauses actions branches type s p o kind value op a b var code fun over map partition when)a
+  @keys ~w(name clauses actions branches facts type s p o kind value op a b var code fun over map partition when)a
   @key_lookup Map.new(@keys, &{Atom.to_string(&1), &1})
 
   def clause_types, do: @clause_types
@@ -59,6 +59,9 @@ defmodule WongiEngineWebui.Spec do
   def new_action("code"), do: %{type: "code", code: "fn token -> [] end"}
 
   def new_branch, do: %{clauses: []}
+
+  @doc "A fact spec: three Elixir literals (or expressions, when evaluating)."
+  def new_fact(s \\ "", p \\ "", o \\ ""), do: %{s: s, p: p, o: o}
 
   @doc "A term spec."
   def var(name \\ ""), do: %{kind: "var", value: name}
@@ -174,10 +177,10 @@ defmodule WongiEngineWebui.Spec do
     end
   end
 
-  @doc "Flattens a rule's string leaves into a map of path to value, for forms."
-  def flatten(rule) do
-    rule
-    |> Map.take([:name, :clauses, :actions])
+  @doc "Flattens string leaves into a map of path to value, for forms."
+  def flatten(data) do
+    data
+    |> Map.delete(:id)
     |> flatten("", %{})
   end
 
@@ -205,4 +208,30 @@ defmodule WongiEngineWebui.Spec do
       _, rule -> rule
     end)
   end
+
+  @doc """
+  Applies `fun` to every variable name in a spec: variable terms and the
+  name fields of filters, assignments and aggregates.
+  """
+  def map_var_names(%{kind: "var", value: name} = term, fun), do: %{term | value: fun.(name)}
+  def map_var_names(%{type: "filter_fn"} = c, fun), do: %{c | var: map_optional(c.var, fun)}
+  def map_var_names(%{type: "assign"} = c, fun), do: %{c | name: fun.(c.name)}
+
+  def map_var_names(%{type: "aggregate"} = c, fun) do
+    partition =
+      c.partition
+      |> String.split(",", trim: true)
+      |> Enum.map_join(", ", &fun.(String.trim(&1)))
+
+    %{c | var: fun.(c.var), over: map_optional(c.over, fun), partition: partition}
+  end
+
+  def map_var_names(map, fun) when is_map(map),
+    do: Map.new(map, fn {key, value} -> {key, map_var_names(value, fun)} end)
+
+  def map_var_names(list, fun) when is_list(list), do: Enum.map(list, &map_var_names(&1, fun))
+  def map_var_names(other, _fun), do: other
+
+  defp map_optional("", _fun), do: ""
+  defp map_optional(name, fun), do: fun.(name)
 end

@@ -33,6 +33,19 @@ defmodule WongiEngineWebui.Router do
     * `:initial_rules` - `{module, function, args}` returning a list of
       `Wongi.Engine.DSL.Rule` structs to start the editor with.
 
+    * `:initial_facts` - `{module, function, args}` returning a list of
+      `{subject, predicate, object}` facts to start the editor's playground
+      with.
+
+    * `:evaluate` - whether the editor evaluates the Elixir code typed into
+      it: `true`, `false` (the default), or `{module, function, args}`
+      returning a boolean, called on mount. **Anyone who can open the page
+      can run arbitrary code on the server when this is on**; only enable it
+      for trusted users. When off, only literal values and a small set of
+      known pure functions (`&min/1`, `&Enum.count/1`, `&is_integer/1`, ...)
+      take effect; other functions are replaced by stand-ins (filters pass,
+      actions do nothing), which the graph marks.
+
     * `:live_socket_path` - the host's LiveView socket path. Defaults to
       `"/live"`.
 
@@ -68,11 +81,21 @@ defmodule WongiEngineWebui.Router do
   def __options__(prefix, opts) do
     engine = opts |> Keyword.get(:engine) |> validate_mfa!(:engine)
     initial_rules = opts |> Keyword.get(:initial_rules) |> validate_mfa!(:initial_rules)
+    initial_facts = opts |> Keyword.get(:initial_facts) |> validate_mfa!(:initial_facts)
+
+    evaluate =
+      case Keyword.get(opts, :evaluate, false) do
+        flag when is_boolean(flag) -> flag
+        mfa -> validate_mfa!(mfa, :evaluate)
+      end
+
     socket_path = Keyword.get(opts, :live_socket_path, "/live")
 
     session_opts =
       [
-        session: {__MODULE__, :__session__, [prefix, engine, initial_rules, socket_path]},
+        session:
+          {__MODULE__, :__session__,
+           [prefix, engine, initial_rules, initial_facts, evaluate, socket_path]},
         root_layout: {WongiEngineWebuiWeb.Layouts, :root}
       ] ++ Keyword.take(opts, [:on_mount])
 
@@ -90,11 +113,13 @@ defmodule WongiEngineWebui.Router do
   end
 
   @doc false
-  def __session__(_conn, prefix, engine, initial_rules, socket_path) do
+  def __session__(_conn, prefix, engine, initial_rules, initial_facts, evaluate, socket_path) do
     %{
       "prefix" => String.trim_trailing(prefix, "/"),
       "engine" => engine,
       "initial_rules" => initial_rules,
+      "initial_facts" => initial_facts,
+      "evaluate" => evaluate,
       "live_socket_path" => socket_path
     }
   end
