@@ -1,0 +1,74 @@
+/* Make LiveView wrapper divs transparent for layout */
+[data-phx-session],
+[data-phx-teleported-src] {
+  display: contents;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Inline SVG icons (see CoreComponents.icon/1); unsized SVGs fill their container */
+.icon {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  vertical-align: -0.125em;
+}
+
+.icon-lg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+/* Keep flash messages out of the document flow */
+.flash-group {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 50;
+}
+
+/* LiveView JS show/hide transitions (see CoreComponents.show/2 and hide/2) */
+.transition-in {
+  transition:
+    opacity 300ms ease-out,
+    transform 300ms ease-out;
+}
+
+.transition-out {
+  transition:
+    opacity 200ms ease-in,
+    transform 200ms ease-in;
+}
+
+.transition-hidden {
+  opacity: 0;
+  transform: translateY(1rem);
+}
+
+.transition-shown {
+  opacity: 1;
+  transform: none;
+}
